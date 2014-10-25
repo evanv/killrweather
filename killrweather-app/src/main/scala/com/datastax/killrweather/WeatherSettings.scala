@@ -15,39 +15,7 @@
  */
 package com.datastax.killrweather
 
-import akka.actor.{ActorSystem, PoisonPill, Props}
 import com.typesafe.config.Config
-import com.datastax.spark.connector.embedded.EmbeddedKafka
-
-/** Runnable: for running WeatherCenter from command line or IDE. */
-object RunnableKillrWeather extends App with KillrWeather
-
-/** Used to run [[RunnableKillrWeather]] and
-  * [[com.datastax.killrweather.api.WeatherServletContextListener]] */
-trait KillrWeather extends WeatherApp {
-
-  override val settings = new WeatherSettings()
-
-  /** Starts the Kafka broker and Zookeeper. */
-  lazy val kafka = new EmbeddedKafka
-
-  /** Creates the ActorSystem. */
-  val system = ActorSystem(settings.AppName)
-
-  /** Creates the raw data topic. */
-  kafka.createTopic(settings.KafkaTopicRaw)
-
-  /* The root supervisor Actor of our app. */
-  val guardian = system.actorOf(Props(new NodeGuardian(ssc, kafka, settings)), "node-guardian")
-
-  system.registerOnTermination {
-    kafka.shutdown()
-    ssc.stop(stopSparkContext = true, stopGracefully = true)
-    guardian ! PoisonPill
-  }
-
-  ssc.awaitTermination()
-}
 
 /**
  * Application settings. First attempts to acquire from the deploy environment.
@@ -56,7 +24,6 @@ trait KillrWeather extends WeatherApp {
  * @param conf Optional config for test
  */
 final class WeatherSettings(conf: Option[Config] = None) extends Settings(conf) {
-  import Weather.UriYearPartition
 
   val CassandraKeyspace = killrweather.getString("cassandra.keyspace")
   val CassandraTableRaw = killrweather.getString("cassandra.table.raw")
@@ -81,6 +48,7 @@ final class WeatherSettings(conf: Option[Config] = None) extends Settings(conf) 
     s to e
   }
 
+  import Weather.UriYearPartition
   val ByYearPartitions: Seq[UriYearPartition] =
     for (year <- HistoricDataYearRange) yield
       UriYearPartition(year, s"$DataLoadPath/$year.csv.gz")
